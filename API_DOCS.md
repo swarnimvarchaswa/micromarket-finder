@@ -12,7 +12,7 @@ The easiest way to hit the API is by appending the coordinates to the URL query 
 
 **URL:**
 ```http
-GET http://yourdomain/api/find?lat={latitude}&lon={longitude}
+GET https://micromarket-finder.vercel.app/api/find?lat={latitude}&lon={longitude}
 ```
 
 **Parameters:**
@@ -21,12 +21,12 @@ GET http://yourdomain/api/find?lat={latitude}&lon={longitude}
 
 **Example (Curl):**
 ```bash
-curl "http://localhost:5000/api/find?lat=12.905143&lon=77.651003"
+curl "https://micromarket-finder.vercel.app/api/find?lat=12.905143&lon=77.651003"
 ```
 
 **Example (JavaScript Fetch):**
 ```javascript
-fetch('http://localhost:5000/api/find?lat=12.905143&lon=77.651003')
+fetch('https://micromarket-finder.vercel.app/api/find?lat=12.905143&lon=77.651003')
   .then(response => response.json())
   .then(data => console.log(data));
 ```
@@ -37,7 +37,7 @@ If you prefer sending a payload, you can perform a POST request. The server acce
 
 **URL:**
 ```http
-POST http://yourdomain/api/find
+POST https://micromarket-finder.vercel.app/api/find
 ```
 
 **Example JSON Payload:**
