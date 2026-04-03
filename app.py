@@ -155,6 +155,52 @@ def get_micromarket_info(lat, lon):
 def home():
     return render_template('index.html')
 
+@app.route('/api/geojson')
+def get_geojson():
+    return jsonify(micromarket_data)
+
+@app.route('/api/find', methods=['GET', 'POST'])
+def api_find():
+    """Endpoint for external apps to find micromarket by lat/lon."""
+    try:
+        # Support both query params and JSON payload
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or request.form
+            lat = data.get('lat') or data.get('latitude')
+            lon = data.get('lon') or data.get('longitude')
+        else:
+            lat = request.args.get('lat') or request.args.get('latitude')
+            lon = request.args.get('lon') or request.args.get('longitude')
+            
+        if not lat or not lon:
+            return jsonify({"error": "Please provide 'lat' and 'lon' parameters"}), 400
+            
+        lat = float(lat)
+        lon = float(lon)
+        
+        micromarket_name, zone_name = get_micromarket_info(lat, lon)
+        
+        if micromarket_name and micromarket_name != "Unknown":
+            return jsonify({
+                "found": True,
+                "latitude": lat,
+                "longitude": lon,
+                "micromarket": micromarket_name,
+                "zone": zone_name
+            })
+        else:
+            return jsonify({
+                "found": False,
+                "error": "Coordinates not found in any known micromarket",
+                "latitude": lat,
+                "longitude": lon
+            }), 404
+            
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid coordinates format. Please provide valid numbers."}), 400
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {e}"}), 500
+
 @app.route('/find_micromarket', methods=['POST'])
 def find_micromarket():
     try:

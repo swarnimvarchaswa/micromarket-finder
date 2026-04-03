@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACN Micromarket Finder</title>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         :root {
             --primary: #0f766e;
@@ -37,7 +39,7 @@
 
         .wrapper {
             width: 100%;
-            max-width: 640px;
+            max-width: 1200px;
             background: var(--surface);
             border-radius: 32px;
             box-shadow: 
@@ -84,6 +86,8 @@
 
         .content {
             padding: 2.5rem;
+            display: block;
+            min-height: 600px;
         }
 
         .search-container {
@@ -166,7 +170,7 @@
 
         #micromarket-result {
             margin-top: 2rem;
-            padding: 2rem;
+            padding: 1.5rem;
             border-radius: 20px;
             background: var(--background);
             animation: fadeIn 0.3s ease;
@@ -298,6 +302,48 @@
             font-size: 0.875rem;
         }
 
+        .view-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+
+        .toggle-btn {
+            background: var(--surface);
+            color: var(--text-light);
+            border: 2px solid #e2e8f0;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: auto;
+            flex: 0 1 auto;
+            display: inline-block;
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-light);
+        }
+
+        .toggle-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1);
+        }
+
+        .view-section {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .view-section.active {
+            display: block;
+        }
+
         @media (max-width: 640px) {
             body {
                 padding: 1rem;
@@ -321,7 +367,7 @@
 
             .search-container {
                 padding: 1.5rem;
-                margin-top: -3rem;
+                margin-top: -1rem;
             }
         }
     </style>
@@ -334,31 +380,46 @@
         </div>
 
         <div class="content">
-            <div class="search-container">
-                <form id="manual-form">
-                    <div class="input-group">
-                        <label for="coordinates">Enter Location Coordinates</label>
-                        <input 
-                            type="text" 
-                            id="coordinates" 
-                            name="coordinates" 
-                            placeholder="Latitude, Longitude (e.g., 12.905143, 77.651003)"
-                            autocomplete="off"
-                        >
-                        <div class="error-message" id="coordinates-error"></div>
-                    </div>
-                    <button type="submit" id="submit-button">
-                        Find Micromarket
-                    </button>
-                </form>
+            <div class="view-toggle">
+                <button class="toggle-btn active" id="btn-search" onclick="switchView('search')">Search form</button>
+                <button class="toggle-btn" id="btn-map" onclick="switchView('map')">Map view</button>
             </div>
 
-            <div class="loading" id="loading">
-                <div class="loading-spinner"></div>
-                <p>Finding your micromarket...</p>
-            </div>
+            <!-- SEARCH VIEW -->
+            <div id="view-search" class="view-section active">
+                <div class="search-container">
+                    <form id="manual-form">
+                        <div class="input-group">
+                            <label for="coordinates">Enter Location Coordinates</label>
+                            <input 
+                                type="text" 
+                                id="coordinates" 
+                                name="coordinates" 
+                                placeholder="Latitude, Longitude (e.g., 12.905143, 77.651003)"
+                                autocomplete="off"
+                            >
+                            <div class="error-message" id="coordinates-error"></div>
+                        </div>
+                        <button type="submit" id="submit-button">
+                            Find Micromarket
+                        </button>
+                    </form>
+                </div>
 
-            <div id="micromarket-result" style="display: none;"></div>
+                <div class="loading" id="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Finding your micromarket...</p>
+                </div>
+
+                <div id="micromarket-result" style="display: none;"></div>
+            </div>
+            
+            <!-- MAP VIEW -->
+            <div id="view-map" class="view-section">
+                <div class="map-container" style="position: relative; opacity: 1; margin-top: 1rem;">
+                    <div id="map" style="width: 100%; height: 100%; min-height: 500px; border-radius: 24px; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1); z-index: 1;"></div>
+                </div>
+            </div>
         </div>
 
         <div class="footer">
@@ -373,6 +434,99 @@
         const submitButton = document.getElementById("submit-button");
         const loadingDiv = document.getElementById("loading");
         const resultDiv = document.getElementById("micromarket-result");
+
+        // Map Initialization
+        const map = L.map('map').setView([12.9716, 77.5946], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        let geojsonLayer;
+        let searchMarker;
+
+        // View Toggle Logic
+        function switchView(viewName) {
+            // Update buttons
+            document.getElementById('btn-search').classList.remove('active');
+            document.getElementById('btn-map').classList.remove('active');
+            document.getElementById('btn-' + viewName).classList.add('active');
+            
+            // Update sections
+            document.getElementById('view-search').classList.remove('active');
+            document.getElementById('view-map').classList.remove('active');
+            document.getElementById('view-' + viewName).classList.add('active');
+
+            if (viewName === 'map') {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
+            }
+        }
+
+        // Custom smooth colors for zones
+        const zoneColors = {
+            'North': '#ef4444',
+            'South': '#10b981',
+            'East': '#3b82f6',
+            'West': '#f59e0b',
+            'Central': '#8b5cf6',
+            'default': '#94a3b8'
+        };
+
+        function getColorForZone(zone) {
+            if (!zone) return zoneColors['default'];
+            for (const [key, color] of Object.entries(zoneColors)) {
+                if (zone.toLowerCase().includes(key.toLowerCase())) return color;
+            }
+            return zoneColors['default'];
+        }
+
+        // Fetch and load GeoJSON
+        fetch('/api/geojson')
+            .then(res => res.json())
+            .then(data => {
+                geojsonLayer = L.geoJSON(data, {
+                    style: function(feature) {
+                        return {
+                            color: '#ffffff',
+                            weight: 1.5,
+                            fillColor: getColorForZone(feature.properties.Zone),
+                            fillOpacity: 0.5
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const micName = feature.properties.Micromarket || "Unknown";
+                        const zoneName = feature.properties.Zone || "Unknown";
+                        layer.bindPopup(`
+                            <div style="font-family: 'Manrope', sans-serif;">
+                                <h3 style="margin:0 0 5px 0; font-size:16px; color:var(--primary-dark)">${micName}</h3>
+                                <p style="margin:0; font-size:14px; color:var(--text-light)">Zone: <b>${zoneName}</b></p>
+                            </div>
+                        `);
+                        layer.on({
+                            mouseover: function(e) {
+                                const l = e.target;
+                                l.setStyle({
+                                    weight: 3,
+                                    color: '#333',
+                                    fillOpacity: 0.7
+                                });
+                                l.bringToFront();
+                            },
+                            mouseout: function(e) {
+                                geojsonLayer.resetStyle(e.target);
+                            }
+                        });
+                    }
+                }).addTo(map);
+
+                if (data.features && data.features.length > 0) {
+                    map.fitBounds(geojsonLayer.getBounds());
+                }
+            })
+            .catch(err => console.error("Error loading geojson", err));
 
         function showError(message) {
             coordinatesError.textContent = message;
@@ -487,6 +641,9 @@
                     const finalName = micromarket === "Unknown"
                         ? "Location not found in any micromarket" 
                         : micromarket;
+                    
+                    // Auto-switch to map view after successful lookup
+                    switchView('map');
 
                     const status = micromarket === "Unknown" ? "warning" : "success";
                     const icon = micromarket === "Unknown" 
@@ -531,6 +688,11 @@
                             </div>
                         </div>
                     `;
+                    // Mark on map
+                    if (searchMarker) map.removeLayer(searchMarker);
+                    searchMarker = L.marker([latNum, lonNum]).addTo(map);
+                    searchMarker.bindPopup(`<b>Searched Location</b><br>${data.latitude}, ${data.longitude}`).openPopup();
+                    map.setView([latNum, lonNum], 14);
                 }
                 resultDiv.style.display = 'block';
             })
